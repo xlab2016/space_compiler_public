@@ -9,6 +9,7 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<ITokenizerService, TokenizerService>();
 builder.Services.AddScoped<IParserService, ParserService>();
 builder.Services.AddScoped<IAnalyzerService, AnalyzerService>();
+builder.Services.AddScoped<IAttentionService, AttentionService>();
 builder.Services.AddScoped<ISpaceProjParser, SpaceProjParser>();
 builder.Services.AddScoped<ICompilationService, CompilationService>();
 

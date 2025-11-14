@@ -11,6 +11,12 @@ namespace SpaceCompiler.Models
         public List<ParsedResource> Resources { get; set; } = new();
 
         /// <summary>
+        /// Self-attention matrix computed between content blocks
+        /// Contains relevance scores and coherence probabilities
+        /// </summary>
+        public AttentionMatrix? AttentionMatrix { get; set; }
+
+        /// <summary>
         /// Compilation metadata
         /// </summary>
         public Dictionary<string, object> Metadata { get; set; } = new();

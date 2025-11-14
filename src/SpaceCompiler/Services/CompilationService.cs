@@ -11,6 +11,7 @@ namespace SpaceCompiler.Services
         private readonly ITokenizerService _tokenizerService;
         private readonly IParserService _parserService;
         private readonly IAnalyzerService _analyzerService;
+        private readonly IAttentionService _attentionService;
         private readonly ISpaceProjParser _spaceProjParser;
         private readonly ILogger<CompilationService> _logger;
 
@@ -18,12 +19,14 @@ namespace SpaceCompiler.Services
             ITokenizerService tokenizerService,
             IParserService parserService,
             IAnalyzerService analyzerService,
+            IAttentionService attentionService,
             ISpaceProjParser spaceProjParser,
             ILogger<CompilationService> logger)
         {
             _tokenizerService = tokenizerService ?? throw new ArgumentNullException(nameof(tokenizerService));
             _parserService = parserService ?? throw new ArgumentNullException(nameof(parserService));
             _analyzerService = analyzerService ?? throw new ArgumentNullException(nameof(analyzerService));
+            _attentionService = attentionService ?? throw new ArgumentNullException(nameof(attentionService));
             _spaceProjParser = spaceProjParser ?? throw new ArgumentNullException(nameof(spaceProjParser));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -75,6 +78,10 @@ namespace SpaceCompiler.Services
 
                 result.Resources.Add(parsedResource);
 
+                // Step 4: Compute Self-Attention
+                _logger.LogInformation("Computing self-attention matrix for {FileName}", fileName);
+                result.AttentionMatrix = await _attentionService.ComputeAttentionAsync(result.Resources);
+
                 _logger.LogInformation(
                     "Successfully compiled {FileName}: {BlockCount} blocks, {FragmentCount} fragments",
                     fileName,
@@ -105,14 +112,30 @@ namespace SpaceCompiler.Services
 
             try
             {
-                // Compile each file
+                // Compile each file (without individual attention computation)
                 foreach (var (fileName, content) in files)
                 {
-                    var fileResult = await CompileFileAsync(content, fileName);
+                    // Use individual compilation steps but skip attention
+                    var contentType = DetectContentType(fileName);
+                    var fragments = await _tokenizerService.TokenizeAsync(content, contentType);
 
-                    result.Resources.AddRange(fileResult.Resources);
-                    result.Errors.AddRange(fileResult.Errors);
-                    result.Warnings.AddRange(fileResult.Warnings);
+                    if (fragments.Count > 0)
+                    {
+                        var parsedResource = await _parserService.BuildAstAsync(fragments, fileName, contentType);
+                        parsedResource = await _analyzerService.AnalyzeAsync(parsedResource);
+                        result.Resources.Add(parsedResource);
+                    }
+                    else
+                    {
+                        result.Warnings.Add($"No fragments extracted from {fileName}");
+                    }
+                }
+
+                // Compute unified self-attention for all resources together
+                if (result.Resources.Count > 0)
+                {
+                    _logger.LogInformation("Computing unified self-attention matrix for all files");
+                    result.AttentionMatrix = await _attentionService.ComputeAttentionAsync(result.Resources);
                 }
 
                 _logger.LogInformation(
@@ -190,6 +213,13 @@ namespace SpaceCompiler.Services
 
                 // Compile files referenced in the project graph
                 await CompileProjectGraphAsync(projectGraph, files, result);
+
+                // Compute self-attention for entire project
+                if (result.Resources.Count > 0)
+                {
+                    _logger.LogInformation("Computing self-attention matrix for project");
+                    result.AttentionMatrix = await _attentionService.ComputeAttentionAsync(result.Resources);
+                }
 
                 _logger.LogInformation(
                     "Successfully compiled project: {ResourceCount} resources, {ErrorCount} errors",
